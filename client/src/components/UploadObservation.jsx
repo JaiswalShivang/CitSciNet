@@ -149,15 +149,41 @@ export default function UploadObservation() {
         }
 
         setIsSubmitting(true);
+        let uploadedUrl = null;
 
         try {
+            // 1. Upload to Cloudinary if image exists
+            if (imageBase64) {
+                // Convert base64 to File object for multer
+                const res = await fetch(imageBase64);
+                const blob = await res.blob();
+                const file = new File([blob], "observation.jpg", { type: "image/jpeg" });
+
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const uploadRes = await fetch(`${API_URL}/api/upload`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    uploadedUrl = uploadData.url;
+                } else {
+                    // Fallback to base64 if upload fails
+                    uploadedUrl = imageBase64;
+                    console.warn('Cloudinary upload failed, falling back to base64');
+                }
+            }
+
             const body = {
                 category,
                 latitude: parseFloat(latitude),
                 longitude: parseFloat(longitude),
                 userName: userName || 'Anonymous',
                 notes: notes || null,
-                imageUrl: imageBase64 || null,
+                imageUrl: uploadedUrl,
                 aiLabel: aiResult?.label || null,
                 confidenceScore: aiResult?.score || null,
             };

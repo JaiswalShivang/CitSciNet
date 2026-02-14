@@ -6,8 +6,19 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
 
 dotenv.config();
+
+// Cloudinary config
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || 'demo',
+    api_key: process.env.CLOUDINARY_API_KEY || '',
+    api_secret: process.env.CLOUDINARY_API_SECRET || '',
+});
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const app = express();
 const httpServer = createServer(app);
@@ -101,6 +112,87 @@ app.post('/api/observations', async (req, res) => {
     } catch (err) {
         console.error('Failed to create observation:', err);
         res.status(500).json({ error: 'Failed to create observation' });
+    }
+});
+
+// ==================== UPLOAD ENDPOINT ====================
+
+app.post('/api/upload', upload.single('image'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        const b64 = Buffer.from(req.file.buffer).toString('base64');
+        const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+
+        const result = await cloudinary.uploader.upload(dataURI, {
+            folder: 'citsci-observations',
+            resource_type: 'image',
+            transformation: [
+                { quality: 'auto', fetch_format: 'auto' },
+                { width: 800, height: 600, crop: 'limit' },
+            ],
+        });
+
+        res.json({
+            url: result.secure_url,
+            publicId: result.public_id,
+            width: result.width,
+            height: result.height,
+        });
+    } catch (err) {
+        console.error('Upload failed:', err);
+        // Fallback: if Cloudinary is not configured, accept base64
+        if (req.body?.base64) {
+            return res.json({ url: req.body.base64 });
+        }
+        res.status(500).json({ error: 'Upload failed' });
+    }
+});
+
+// Base64 upload fallback (no Cloudinary needed)
+app.post('/api/upload-base64', async (req, res) => {
+    try {
+        const { base64 } = req.body;
+        if (!base64) return res.status(400).json({ error: 'No image data' });
+
+        // Try Cloudinary first
+        try {
+            const result = await cloudinary.uploader.upload(base64, {
+                folder: 'citsci-observations',
+                resource_type: 'image',
+                transformation: [
+                    { quality: 'auto', fetch_format: 'auto' },
+                    { width: 800, height: 600, crop: 'limit' },
+                ],
+            });
+            return res.json({ url: result.secure_url });
+        } catch {
+            // Cloudinary not configured — just return the base64
+            return res.json({ url: base64 });
+        }
+    } catch (err) {
+        console.error('Base64 upload failed:', err);
+        res.status(500).json({ error: 'Upload failed' });
+    }
+});
+
+// ==================== OBSERVATION STATUS ENDPOINTS ====================
+
+app.patch('/api/observations/:id/verify', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { verified } = req.body;
+        const observation = await prisma.observation.update({
+            where: { id },
+            data: { verified: verified !== undefined ? verified : true },
+        });
+        io.emit('observation-updated', observation);
+        res.json(observation);
+    } catch (err) {
+        console.error('Failed to update observation:', err);
+        res.status(500).json({ error: 'Failed to update observation' });
     }
 });
 

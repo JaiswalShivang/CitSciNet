@@ -7,7 +7,7 @@ import useObservationStore from '../../../store/useObservationStore';
 import useAuthStore from '../../../store/authStore';
 import {
     BarChart3, Target, Eye, CheckCircle2, AlertTriangle,
-    ArrowUpDown, Search, MapPin, Sparkles, Clock, Filter
+    ArrowUpDown, Search, MapPin, Sparkles, Clock, Filter, X
 } from 'lucide-react';
 
 const MapComponent = dynamic(() => import('../../../components/MapComponent'), {
@@ -145,7 +145,7 @@ export default function ResearcherDashboard() {
         <div className="flex flex-1 overflow-hidden">
             {/* Left sidebar — Map + Mission Creator */}
             <div className="flex w-[45%] flex-col border-r border-white/10">
-                <div className="relative flex-1">
+                <div className="relative flex-1 z-0">
                     <MapComponent missions={missions}>
                         <MissionCreator
                             onMissionCreated={() => {
@@ -225,6 +225,7 @@ export default function ResearcherDashboard() {
                     <table className="w-full text-sm">
                         <thead className="sticky top-0 z-10 bg-gray-950/95 backdrop-blur-sm">
                             <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-white/40">
+                                <th className="px-4 py-3 font-medium">Photo</th>
                                 <th className="px-4 py-3 font-medium">
                                     <button
                                         onClick={() => toggleSort('category')}
@@ -245,7 +246,6 @@ export default function ResearcherDashboard() {
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-medium">User</th>
-                                <th className="px-4 py-3 font-medium">Location</th>
                                 <th className="px-4 py-3 font-medium">
                                     <button
                                         onClick={() => toggleSort('createdAt')}
@@ -256,12 +256,13 @@ export default function ResearcherDashboard() {
                                     </button>
                                 </th>
                                 <th className="px-4 py-3 font-medium">Status</th>
+                                <th className="px-4 py-3 font-medium">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filtered.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-white/30">
+                                    <td colSpan={9} className="py-12 text-center text-white/30">
                                         <Eye className="mx-auto mb-2 h-8 w-8" />
                                         <p className="text-sm">No observations found</p>
                                     </td>
@@ -272,6 +273,22 @@ export default function ResearcherDashboard() {
                                         key={obs.id}
                                         className="border-b border-white/5 transition-colors hover:bg-white/[0.03]"
                                     >
+                                        <td className="px-4 py-3">
+                                            {obs.imageUrl ? (
+                                                <div className="h-10 w-10 overflow-hidden rounded-md border border-white/10">
+                                                    <img
+                                                        src={obs.imageUrl}
+                                                        alt="obs"
+                                                        className="h-full w-full object-cover cursor-pointer hover:scale-110 transition-transform"
+                                                        onClick={() => window.open(obs.imageUrl, '_blank')}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-md border border-dashed border-white/10 bg-white/5">
+                                                    <Eye className="h-4 w-4 text-white/20" />
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">
                                             <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-medium text-white/80">
                                                 {obs.category}
@@ -297,12 +314,6 @@ export default function ResearcherDashboard() {
                                         <td className="px-4 py-3 text-white/60">{obs.userName}</td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-1 text-xs text-white/40">
-                                                <MapPin className="h-3 w-3" />
-                                                {obs.latitude.toFixed(2)}, {obs.longitude.toFixed(2)}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1 text-xs text-white/40">
                                                 <Clock className="h-3 w-3" />
                                                 {formatTime(obs.createdAt)}
                                             </div>
@@ -319,6 +330,40 @@ export default function ResearcherDashboard() {
                                                     Pending
                                                 </span>
                                             )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                {!obs.verified && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            const res = await fetch(`${API_URL}/api/observations/${obs.id}/verify`, {
+                                                                method: 'PATCH',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ verified: true })
+                                                            });
+                                                            if (res.ok) window.location.reload();
+                                                        }}
+                                                        className="rounded bg-green-500/10 p-1 text-green-400 hover:bg-green-500/20"
+                                                        title="Verify"
+                                                    >
+                                                        <CheckCircle2 className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={async () => {
+                                                        if (confirm('Delete this observation?')) {
+                                                            const res = await fetch(`${API_URL}/api/observations/${obs.id}`, {
+                                                                method: 'DELETE'
+                                                            });
+                                                            if (res.ok) window.location.reload();
+                                                        }
+                                                    }}
+                                                    className="rounded bg-red-500/10 p-1 text-red-400 hover:bg-red-500/20"
+                                                    title="Delete"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
