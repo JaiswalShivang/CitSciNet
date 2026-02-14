@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch index.js",
+    "build": "npx prisma generate && npx prisma db push",
     "start": "node index.js",
     "db:push": "npx prisma db push",
     "db:generate": "npx prisma generate",

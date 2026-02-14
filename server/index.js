@@ -25,16 +25,23 @@ const app = express();
 const httpServer = createServer(app);
 const prisma = new PrismaClient();
 
+// Build allowed origins from env + localhost defaults
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    process.env.FRONTEND_URL, // Your Vercel URL
+].filter(Boolean);
+
 const io = new Server(httpServer, {
     cors: {
-        origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
         credentials: true
     }
 });
 
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: allowedOrigins,
     credentials: true
 }));
 app.use(helmet({ contentSecurityPolicy: false }));
