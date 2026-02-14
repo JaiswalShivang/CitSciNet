@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Observation {
+  id              String   @id @default(uuid())
+  latitude        Float
+  longitude       Float
+  imageUrl        String?
+  category        String
+  aiLabel         String?
+  confidenceScore Float?
+  userName        String   @default("Anonymous")
+  notes           String?
+  verified        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Mission {
+  id          String         @id @default(uuid())
+  title       String
+  description String?
+  bountyPoints Int           @default(10)
+  geometry    Json           // GeoJSON polygon
+  createdBy   String         @default("Researcher")
+  active      Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  userMissions UserMission[]
+}
+
+model UserMission {
+  id          String    @id @default(uuid())
+  missionId   String
+  mission     Mission   @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  userName    String
+  status      String    @default("accepted") // accepted, completed, abandoned
+  acceptedAt  DateTime  @default(now())
+  completedAt DateTime?
+  
+  @@unique([missionId, userName])
+}
