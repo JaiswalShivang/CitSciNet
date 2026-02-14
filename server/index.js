@@ -853,6 +853,157 @@ app.get('/api/users/leaderboard', async (req, res) => {
     }
 });
 
+// ==================== DISCOVER (Researcher Discovery) ====================
+
+// Field-to-missionType mapping
+const FIELD_MAP = {
+    'Ecology': ['Wildlife', 'Plant'],
+    'Water Quality': ['Water'],
+    'Wildlife Conservation': ['Wildlife'],
+    'Botany': ['Plant'],
+    'Air Quality': ['Air'],
+    'Environmental Science': ['Wildlife', 'Water', 'Air', 'Plant'],
+};
+
+function computeProjectStatus(mission, volunteerCount) {
+    if (!mission.active) return 'Closed';
+    if (volunteerCount === 0) return 'Open';
+    if (volunteerCount < 5) return 'Recruiting';
+    return 'Ongoing';
+}
+
+function computeCoverageArea(geometry) {
+    if (!geometry?.coordinates?.[0]) return 'Unknown';
+    const coords = geometry.coordinates[0];
+    const lats = coords.map(c => c[1]);
+    const lngs = coords.map(c => c[0]);
+    const centerLat = ((Math.min(...lats) + Math.max(...lats)) / 2).toFixed(2);
+    const centerLng = ((Math.min(...lngs) + Math.max(...lngs)) / 2).toFixed(2);
+    const spanKm = ((Math.max(...lats) - Math.min(...lats)) * 111).toFixed(1);
+    return `${centerLat}°N, ${centerLng}°E (~${spanKm} km span)`;
+}
+
+// Discover projects — filterable list
+app.get('/api/discover', async (req, res) => {
+    try {
+        const { field, status, dataType, location } = req.query;
+
+        // Build where clause
+        const where = { active: true };
+
+        // Filter by field → missionType mapping
+        if (field && FIELD_MAP[field]) {
+            where.missionType = { in: FIELD_MAP[field] };
+        }
+
+        // Filter by direct dataType
+        if (dataType) {
+            where.missionType = dataType;
+        }
+
+        // Text search in title/description
+        if (location) {
+            where.OR = [
+                { title: { contains: location, mode: 'insensitive' } },
+                { description: { contains: location, mode: 'insensitive' } },
+            ];
+        }
+
+        const missions = await prisma.mission.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                userMissions: { select: { userName: true, status: true } },
+            },
+        });
+
+        // Enrich with computed fields
+        const projects = missions.map(m => {
+            const volunteerCount = m.userMissions.length;
+            const projectStatus = computeProjectStatus(m, volunteerCount);
+            return {
+                id: m.id,
+                title: m.title,
+                description: m.description,
+                scientificGoal: m.scientificGoal,
+                dataProtocol: m.dataProtocol,
+                dataType: m.missionType,
+                dataRequirement: m.dataRequirement,
+                bountyPoints: m.bountyPoints,
+                coverageArea: computeCoverageArea(m.geometry),
+                volunteerCount,
+                status: projectStatus,
+                createdBy: m.createdBy,
+                createdAt: m.createdAt,
+            };
+        });
+
+        // Filter by status after computation
+        const filtered = status
+            ? projects.filter(p => p.status.toLowerCase() === status.toLowerCase())
+            : projects;
+
+        res.json(filtered);
+    } catch (err) {
+        console.error('Discover failed:', err);
+        res.status(500).json({ error: 'Failed to discover projects' });
+    }
+});
+
+// Single project detail
+app.get('/api/discover/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const mission = await prisma.mission.findUnique({
+            where: { id },
+            include: {
+                userMissions: {
+                    select: { userName: true, status: true, acceptedAt: true, completedAt: true },
+                },
+            },
+        });
+
+        if (!mission) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const volunteerCount = mission.userMissions.length;
+        const observationCount = await prisma.observation.count({ where: { missionId: id } });
+        const recentObservations = await prisma.observation.findMany({
+            where: { missionId: id },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+            select: {
+                id: true, category: true, aiLabel: true, userName: true,
+                confidenceScore: true, verified: true, createdAt: true,
+            },
+        });
+
+        res.json({
+            id: mission.id,
+            title: mission.title,
+            description: mission.description,
+            scientificGoal: mission.scientificGoal,
+            dataProtocol: mission.dataProtocol,
+            dataType: mission.missionType,
+            dataRequirement: mission.dataRequirement,
+            bountyPoints: mission.bountyPoints,
+            geometry: mission.geometry,
+            coverageArea: computeCoverageArea(mission.geometry),
+            volunteerCount,
+            status: computeProjectStatus(mission, volunteerCount),
+            createdBy: mission.createdBy,
+            createdAt: mission.createdAt,
+            volunteers: mission.userMissions,
+            observationCount,
+            recentObservations,
+        });
+    } catch (err) {
+        console.error('Discover detail failed:', err);
+        res.status(500).json({ error: 'Failed to fetch project details' });
+    }
+});
 
 const PORT = process.env.PORT || 4000;
 

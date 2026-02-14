@@ -10,7 +10,7 @@ import SocketProvider from '../../providers/SocketProvider';
 import {
     Globe, Map, FlaskConical, Target, User, Settings, LogOut,
     Wifi, WifiOff, Users, Eye, ChevronLeft, ChevronRight, Menu,
-    GraduationCap, BookOpen, Shield, Compass, BarChart3, Trophy
+    GraduationCap, BookOpen, Shield, Compass, BarChart3, Trophy, Search
 } from 'lucide-react';
 
 function Sidebar({ collapsed, setCollapsed, user }) {
@@ -48,13 +48,20 @@ function Sidebar({ collapsed, setCollapsed, user }) {
         {
             label: 'Research',
             items: [
+                {
+                    icon: Search,
+                    label: 'Discover Projects',
+                    desc: 'Find citizen science projects',
+                    href: '/discover',
+                    highlight: true,
+                },
                 ...(isResearcher
                     ? [{
                         icon: Compass,
                         label: 'Explore',
                         desc: 'Spatial area analysis',
                         href: '/researcher',
-                        highlight: true,
+                        highlight: false,
                     }]
                     : []
                 ),

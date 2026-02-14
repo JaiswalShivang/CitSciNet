@@ -1,69 +1,85 @@
-'use client';
-
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
-const useAuthStore = create(
-    persist(
-        (set, get) => ({
-            user: null,
-            users: [], // mock user database
+const STORAGE_KEY = 'citscinet-auth';
 
-            isAuthenticated: () => !!get().user,
+function loadUser() {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch {
+        return null;
+    }
+}
 
-            signup: (email, password, role, name) => {
-                const { users } = get();
-                const exists = users.find((u) => u.email === email);
-                if (exists) {
-                    return { success: false, error: 'Email already registered' };
-                }
+function saveUser(user) {
+    if (typeof window === 'undefined') return;
+    if (user) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    } else {
+        localStorage.removeItem(STORAGE_KEY);
+    }
+}
 
-                const newUser = {
-                    id: crypto.randomUUID(),
-                    email,
-                    password,
-                    role,
-                    name: name || email.split('@')[0],
-                    createdAt: new Date().toISOString(),
-                };
+const useAuthStore = create((set, get) => ({
+    user: loadUser(),
 
-                set({
-                    users: [...users, newUser],
-                    user: { id: newUser.id, email: newUser.email, role: newUser.role, name: newUser.name },
-                });
-
-                return { success: true };
-            },
-
-            login: (email, password) => {
-                const { users } = get();
-                const found = users.find(
-                    (u) => u.email === email && u.password === password
-                );
-
-                if (!found) {
-                    return { success: false, error: 'Invalid email or password' };
-                }
-
-                set({
-                    user: { id: found.id, email: found.email, role: found.role, name: found.name },
-                });
-
-                return { success: true, role: found.role };
-            },
-
-            logout: () => {
-                set({ user: null });
-            },
-        }),
-        {
-            name: 'citsci-auth',
-            partialize: (state) => ({
-                user: state.user,
-                users: state.users,
-            }),
+    login: (email, password) => {
+        if (!email || !password) {
+            return { success: false, error: 'Email and password are required.' };
         }
-    )
-);
+
+        // Check localStorage for registered users
+        const users = JSON.parse(localStorage.getItem('citscinet-users') || '[]');
+        const found = users.find(u => u.email === email);
+
+        if (found) {
+            if (found.password !== password) {
+                return { success: false, error: 'Incorrect password.' };
+            }
+            const user = { email: found.email, name: found.name, role: found.role };
+            set({ user });
+            saveUser(user);
+            return { success: true, role: user.role };
+        }
+
+        // Default demo accounts
+        const role = email.includes('researcher') ? 'researcher' : 'citizen';
+        const user = { email, name: email.split('@')[0], role };
+        set({ user });
+        saveUser(user);
+        return { success: true, role };
+    },
+
+    signup: (email, password, role = 'citizen', name = '') => {
+        if (!email || !password) {
+            return { success: false, error: 'Email and password are required.' };
+        }
+
+        const users = JSON.parse(localStorage.getItem('citscinet-users') || '[]');
+
+        if (users.find(u => u.email === email)) {
+            return { success: false, error: 'An account with this email already exists.' };
+        }
+
+        const newUser = { email, password, name: name || email.split('@')[0], role };
+        users.push(newUser);
+        localStorage.setItem('citscinet-users', JSON.stringify(users));
+
+        const user = { email: newUser.email, name: newUser.name, role: newUser.role };
+        set({ user });
+        saveUser(user);
+        return { success: true };
+    },
+
+    logout: () => {
+        set({ user: null });
+        saveUser(null);
+    },
+
+    isAuthenticated: () => {
+        return !!get().user;
+    },
+}));
 
 export default useAuthStore;
